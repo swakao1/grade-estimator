@@ -1,10 +1,13 @@
 # Combined Grade Estimator - Shiny App (one app, several courses)
 #
-# Students can pick their course from the dropdown, or you can give each class
+# Students pick their professor, then their course, or you can give each class
 # a direct link that opens on its course:
-#   .../grade_estimator/?course=wakao
-#   .../grade_estimator/?course=govt2305
-#   .../grade_estimator/?course=econ
+#   https://swakao1.github.io/grade-estimator/?course=wakao
+#   https://swakao1.github.io/grade-estimator/?course=govt2305
+#   https://swakao1.github.io/grade-estimator/?course=econ
+#   https://swakao1.github.io/grade-estimator/?course=span1411
+#   https://swakao1.github.io/grade-estimator/?course=hist1301
+#   https://swakao1.github.io/grade-estimator/?course=hist1302
 #
 # To add or change a course, edit the `courses` list below.
 
@@ -14,7 +17,7 @@ library(shiny)
 courses <- list(
 
   wakao = list(
-    name = "Prof. Wakao",
+    prof = "Wakao", course = "GOVT-2305/2306",
     bg = "#f5f7fa", accent = "#2f6aa3", dark = "#1f4e79",
     components = list(
       list(id = "exams", label = "Exams (best 3 of 4)", weight = 60,
@@ -28,7 +31,7 @@ courses <- list(
   ),
 
   govt2305 = list(
-    name = "GOVT-2305 (Skipworth)",
+    prof = "Skipworth", course = "GOVT-2305",
     bg = "#e6f2ee", accent = "#2e8b6e", dark = "#1d5c4a",
     components = list(
       list(id = "paper",   label = "Position Paper & Class Discussion Assignment", weight = 40),
@@ -39,7 +42,7 @@ courses <- list(
   ),
 
   econ = list(
-    name = "ECON-2301/2302 (Li)",
+    prof = "Li", course = "ECON-2301/2302",
     bg = "#e8f0fa", accent = "#3567b5", dark = "#1f3f73",
     components = list(
       list(id = "exam1",       label = "Quiz/Exam 1",           weight = 20),
@@ -48,20 +51,73 @@ courses <- list(
       list(id = "assignments", label = "Assignments (average)", weight = 35),
       list(id = "discussion",  label = "Discussion",            weight = 5)
     )
+  ),
+
+  span1411 = list(
+    prof = "Naranjo", course = "SPAN-1411",
+    bg = "#fbf1e6", accent = "#c8692b", dark = "#8a4318",
+    components = list(
+      list(id = "quizzes",     label = "Chapter Quizzes",  weight = 25),
+      list(id = "discussions", label = "Discussions",      weight = 25),
+      list(id = "exams",       label = "Chapter Exams",    weight = 20),
+      list(id = "final",       label = "Final Exam",       weight = 10),
+      list(id = "project",     label = "Cultural Project", weight = 20)
+    )
+  ),
+
+  hist1301 = list(
+    prof = "Schafman", course = "HIST-1301",
+    bg = "#f4eef7", accent = "#7a4f9e", dark = "#4e2f6b",
+    components = list(
+      list(id = "attendance", label = "Attendance",                       weight = 10),
+      list(id = "quizzes",    label = "Quizzes",                          weight = 5),
+      list(id = "discussion", label = "Discussion",                       weight = 5),
+      list(id = "responses",  label = "Written Primary Source Responses", weight = 5),
+      list(id = "oral",       label = "Oral Source Presentation",         weight = 5),
+      list(id = "writing",    label = "Writing Assignment",               weight = 20),
+      list(id = "midterm",    label = "Midterm Exam",                     weight = 25),
+      list(id = "final",      label = "Final Exam",                       weight = 25)
+    )
+  ),
+
+  hist1302 = list(
+    prof = "Schafman", course = "HIST-1302",
+    bg = "#f8ecee", accent = "#a8434f", dark = "#702832",
+    components = list(
+      list(id = "attendance", label = "Attendance",                              weight = 10),
+      list(id = "quizzes",    label = "Quizzes",                                 weight = 5),
+      list(id = "discussion", label = "Discussion",                              weight = 5),
+      list(id = "responses",  label = "Written Primary Source Responses",        weight = 5),
+      list(id = "oral",       label = "Oral Source Presentation",                weight = 5),
+      list(id = "writing1",   label = "Writing Assignment 1",                    weight = 10),
+      list(id = "spr",        label = "Social and Personal Responsibility Paper", weight = 10),
+      list(id = "midterm",    label = "Midterm Exam",                            weight = 25),
+      list(id = "final",      label = "Final Exam",                              weight = 25)
+    )
   )
 )
 
 # ---- Helpers ---------------------------------------------------------------
 letter_grade <- function(p) {
   if (is.na(p)) return("-")
+  p <- round(p, 2)  # match the percentage shown on screen
   if (p >= 90) "A" else if (p >= 80) "B" else if (p >= 70) "C" else if (p >= 60) "D" else "F"
 }
 
 grade_input <- function(id, label) {
-  numericInput(id, label, value = NA, min = 0, max = 100, step = 0.1)
+  numericInput(id, label, value = NA, min = 0, max = 150, step = 0.1)
 }
 
-clean <- function(x) if (is.null(x) || is.na(x)) NA else max(0, min(100, x))
+# Scores above 100 (extra credit) are kept; only negatives are corrected.
+clean <- function(x) if (is.null(x) || is.na(x)) NA else max(0, x)
+
+profs <- sort(unique(sapply(courses, `[[`, "prof")))
+
+# Course choices for one professor: labels are course numbers, values are keys
+course_choices <- function(prof) {
+  keys <- names(courses)[sapply(courses, `[[`, "prof") == prof]
+  setNames(keys, sapply(courses[keys], `[[`, "course"))
+}
 
 all_input_ids <- function(key) {
   ids <- unlist(lapply(courses[[key]]$components, function(comp)
@@ -83,13 +139,15 @@ ui <- fluidPage(
   fluidRow(
     column(5,
       div(class = "card",
-        selectInput("course", "Course",
-                    choices = setNames(names(courses), sapply(courses, `[[`, "name"))),
+        selectInput("prof", "Professor", choices = profs),
+        selectInput("course", "Course", choices = NULL),
         hr(),
         uiOutput("inputs"),
         actionButton("reset", "Clear all", icon = icon("eraser")),
         p(class = "note", br(),
-          "Enter each grade as a percentage (0–100). Leave a box blank if that grade isn't available yet.")
+          "Enter each grade as a percentage (scores above 100 for extra credit are fine). ",
+          "Leave a box blank only if that grade isn't available yet. ",
+          "If you missed an exam or assignment, enter 0.")
       )
     ),
     column(7,
@@ -110,10 +168,24 @@ ui <- fluidPage(
 server <- function(input, output, session) {
 
   # Open on the course named in the link, e.g. ?course=econ
-  observe({
+  link_course <- reactiveVal(NULL)
+  observeEvent(session$clientData$url_search, {
     q <- parseQueryString(session$clientData$url_search)
-    if (!is.null(q$course) && q$course %in% names(courses))
-      updateSelectInput(session, "course", selected = q$course)
+    if (!is.null(q$course) && q$course %in% names(courses)) {
+      link_course(q$course)
+      updateSelectInput(session, "prof", selected = courses[[q$course]]$prof)
+    }
+  }, once = TRUE)
+
+  # When the professor changes, show only that professor's courses
+  observeEvent(input$prof, {
+    ch <- course_choices(input$prof)
+    sel <- ch[1]
+    if (isTRUE(link_course() %in% ch)) {  # use the linked course once, then forget it
+      sel <- link_course()
+      link_course(NULL)
+    }
+    updateSelectInput(session, "course", choices = ch, selected = sel)
   })
 
   cfg <- reactive({
@@ -207,7 +279,8 @@ server <- function(input, output, session) {
         if (!is.na(row$dropped))
           msg <- paste0(msg, " ", row$dropped, " (your lowest) was dropped.")
         else if (row$entered > 0)
-          msg <- paste0(msg, " The lowest exam will be dropped once all ", row$total, " are entered.")
+          msg <- paste0(msg, " The lowest exam will be dropped once all ", row$total,
+                        " are entered. If you missed an exam, enter 0 for it so the estimate is accurate.")
       }
     }
     msg
