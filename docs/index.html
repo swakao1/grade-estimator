@@ -1,28 +1,473 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Shiny App</title>
-    <script
-      src="./shinylive/load-shinylive-sw.js"
-      type="module"
-    ></script>
-    <script type="module">
-      import { runExportedApp } from "./shinylive/shinylive.js";
-      runExportedApp({
-        id: "root",
-        appEngine: "r",
-        relPath: "",
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Course Grade Estimator</title>
+<!--
+  Course Grade Estimator (plain HTML/JavaScript version)
+
+  Students pick their professor, then their course, or you can give each class
+  a direct link that opens on its course:
+    https://swakao1.github.io/grade-estimator/?course=wakao
+    https://swakao1.github.io/grade-estimator/?course=govt2305
+    https://swakao1.github.io/grade-estimator/?course=econ
+    https://swakao1.github.io/grade-estimator/?course=span1411
+    https://swakao1.github.io/grade-estimator/?course=hist1301
+    https://swakao1.github.io/grade-estimator/?course=hist1302
+
+  To add or change a course, edit the COURSES list in the <script> section below.
+  No R, no rebuild step: save this file, commit, and push.
+-->
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --accent: #2f6aa3;
+    --dark: #1f4e79;
+    --text: #222;
+    --muted: #666;
+    --line: #dde1e6;
+    --card: #fff;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+    transition: background-color .2s;
+  }
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 16px 16px 40px; }
+  h1 { color: var(--dark); font-size: 28px; font-weight: 600; margin: 8px 0 18px; }
+  .grid { display: grid; grid-template-columns: 5fr 7fr; gap: 20px; align-items: start; }
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr; gap: 0; }
+    h1 { font-size: 24px; }
+  }
+  .card {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    border-top: 4px solid var(--accent);
+  }
+  .card h2 { font-size: 18px; font-weight: 600; margin: 0 0 12px; }
+  label { display: block; font-weight: 600; margin-bottom: 5px; }
+  select, input[type=number] {
+    width: 100%;
+    font: inherit;
+    font-size: 16px; /* stops iPhone from zooming in on tap */
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    color: var(--text);
+  }
+  select:focus, input:focus, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }
+  .field { margin-bottom: 14px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  .group-heading { font-size: 15px; font-weight: 700; margin: 4px 0 10px; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+  button {
+    font: inherit;
+    padding: 7px 14px;
+    border-radius: 6px;
+    background: #fff;
+    border: 1px solid var(--accent);
+    color: var(--dark);
+    cursor: pointer;
+  }
+  button:hover { background: var(--bg); }
+  .note { color: var(--muted); font-size: 13px; margin: 14px 0 0; }
+  .final { font-size: 56px; font-weight: 700; line-height: 1; color: var(--dark); }
+  .final.empty { color: #bbb; }
+  .letter { font-size: 28px; font-weight: 600; color: #555; margin-top: 6px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: #fafbfc; }
+  tbody tr:nth-child(odd) td { background: #f7f8fa; }
+  td.num, th.num { white-space: nowrap; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Course Grade Estimator</h1>
+
+  <div class="grid">
+    <section class="card">
+      <div class="field">
+        <label for="prof">Professor</label>
+        <select id="prof"></select>
+      </div>
+      <div class="field">
+        <label for="course">Course</label>
+        <select id="course"></select>
+      </div>
+      <hr>
+      <div id="inputs"></div>
+      <button id="reset" type="button">&#x232B; Clear all</button>
+      <p class="note">
+        Enter each grade as a percentage (scores above 100 for extra credit are fine).
+        Leave a box blank only if that grade isn't available yet.
+        If you missed an exam or assignment, enter 0.
+      </p>
+    </section>
+
+    <div>
+      <section class="card" aria-live="polite">
+        <h2>Estimated Final Grade</h2>
+        <div id="final" class="final empty">&mdash;</div>
+        <div id="letter" class="letter"></div>
+        <p id="basis" class="note"></p>
+      </section>
+      <section class="card">
+        <h2>Breakdown</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Category</th><th class="num">Weight</th><th class="num">Score</th><th class="num">Points Earned</th></tr>
+            </thead>
+            <tbody id="breakdown"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+// ============================================================================
+// COURSE SETTINGS  -  edit this list to add or change a course.
+//
+// Each course needs: prof, course, three colors (bg, accent, dark), and a list
+// of components. A component is either
+//   a single grade:   { id: "paper", label: "Position Paper", weight: 15 }
+// or a group of grades that are averaged (optionally dropping the lowest):
+//   { id: "exams", label: "...", weight: 60, heading: "...",
+//     parts: ["exam1","exam2"], partLabels: ["Exam 1","Exam 2"], dropLowest: true }
+// The key (e.g. wakao) is what goes in the link: ?course=wakao
+// ============================================================================
+const COURSES = {
+
+  wakao: {
+    prof: "Wakao", course: "GOVT-2305/2306",
+    bg: "#f5f7fa", accent: "#2f6aa3", dark: "#1f4e79",
+    components: [
+      { id: "exams", label: "Exams (best 3 of 4)", weight: 60,
+        heading: "Exams — 60% (lowest of 4 is dropped)",
+        parts: ["exam1", "exam2", "exam3", "exam4"],
+        partLabels: ["Exam 1", "Exam 2", "Exam 3", "Exam 4"],
+        dropLowest: true },
+      { id: "tutoring", label: "Tutoring Center Assignment", weight: 5 },
+      { id: "paper",    label: "Position Paper",             weight: 15 },
+      { id: "homework", label: "Homework (average)",         weight: 20 }
+    ]
+  },
+
+  govt2305: {
+    prof: "Skipworth", course: "GOVT-2305",
+    bg: "#e6f2ee", accent: "#2e8b6e", dark: "#1d5c4a",
+    components: [
+      { id: "paper",   label: "Position Paper & Class Discussion Assignment", weight: 40 },
+      { id: "quizzes", label: "Quizzes (average)", weight: 30 },
+      { id: "midterm", label: "Midterm Oral Exam", weight: 10 },
+      { id: "final",   label: "Final Oral Exam",   weight: 20 }
+    ]
+  },
+
+  econ: {
+    prof: "Li", course: "ECON-2301/2302",
+    bg: "#e8f0fa", accent: "#3567b5", dark: "#1f3f73",
+    components: [
+      { id: "exam1",       label: "Quiz/Exam 1",           weight: 20 },
+      { id: "exam2",       label: "Quiz/Exam 2",           weight: 20 },
+      { id: "exam3",       label: "Quiz/Exam 3",           weight: 20 },
+      { id: "assignments", label: "Assignments (average)", weight: 35 },
+      { id: "discussion",  label: "Discussion",            weight: 5 }
+    ]
+  },
+
+  span1411: {
+    prof: "Naranjo", course: "SPAN-1411",
+    bg: "#fbf1e6", accent: "#c8692b", dark: "#8a4318",
+    components: [
+      { id: "quizzes",     label: "Chapter Quizzes",  weight: 25 },
+      { id: "discussions", label: "Discussions",      weight: 25 },
+      { id: "exams",       label: "Chapter Exams",    weight: 20 },
+      { id: "final",       label: "Final Exam",       weight: 10 },
+      { id: "project",     label: "Cultural Project", weight: 20 }
+    ]
+  },
+
+  hist1301: {
+    prof: "Schafman", course: "HIST-1301",
+    bg: "#f4eef7", accent: "#7a4f9e", dark: "#4e2f6b",
+    components: [
+      { id: "attendance", label: "Attendance",                       weight: 10 },
+      { id: "quizzes",    label: "Quizzes",                          weight: 5 },
+      { id: "discussion", label: "Discussion",                       weight: 5 },
+      { id: "responses",  label: "Written Primary Source Responses", weight: 5 },
+      { id: "oral",       label: "Oral Source Presentation",         weight: 5 },
+      { id: "writing",    label: "Writing Assignment",               weight: 20 },
+      { id: "midterm",    label: "Midterm Exam",                     weight: 25 },
+      { id: "final",      label: "Final Exam",                       weight: 25 }
+    ]
+  },
+
+  hist1302: {
+    prof: "Schafman", course: "HIST-1302",
+    bg: "#f8ecee", accent: "#a8434f", dark: "#702832",
+    components: [
+      { id: "attendance", label: "Attendance",                               weight: 10 },
+      { id: "quizzes",    label: "Quizzes",                                  weight: 5 },
+      { id: "discussion", label: "Discussion",                               weight: 5 },
+      { id: "responses",  label: "Written Primary Source Responses",         weight: 5 },
+      { id: "oral",       label: "Oral Source Presentation",                 weight: 5 },
+      { id: "writing1",   label: "Writing Assignment 1",                     weight: 10 },
+      { id: "spr",        label: "Social and Personal Responsibility Paper", weight: 10 },
+      { id: "midterm",    label: "Midterm Exam",                             weight: 25 },
+      { id: "final",      label: "Final Exam",                               weight: 25 }
+    ]
+  }
+};
+// ============================ end of settings ===============================
+
+
+(function () {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const keys = Object.keys(COURSES);
+  const profs = [...new Set(keys.map((k) => COURSES[k].prof))].sort();
+  const values = {};      // grades typed so far, kept while switching courses
+  let currentKey = null;
+
+  // ---- Helpers --------------------------------------------------------------
+  function letterGrade(p) {
+    if (p === null) return "-";
+    p = Math.round(p * 100) / 100;  // match the percentage shown on screen
+    return p >= 90 ? "A" : p >= 80 ? "B" : p >= 70 ? "C" : p >= 60 ? "D" : "F";
+  }
+
+  // Scores above 100 (extra credit) are kept; only negatives are corrected.
+  function clean(raw) {
+    if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+    const x = Number(raw);
+    return Number.isFinite(x) ? Math.max(0, x) : null;
+  }
+
+  const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const fmt = (x) => x.toFixed(2);
+
+  function el(tag, attrs, text) {
+    const e = document.createElement(tag);
+    for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function coursesFor(prof) {
+    return keys.filter((k) => COURSES[k].prof === prof);
+  }
+
+  // ---- Building the page ----------------------------------------------------
+  function fillProfs() {
+    profs.forEach((p) => $("prof").appendChild(el("option", { value: p }, p)));
+  }
+
+  function fillCourses(prof, selectedKey) {
+    const sel = $("course");
+    sel.innerHTML = "";
+    const ks = coursesFor(prof);
+    ks.forEach((k) => sel.appendChild(el("option", { value: k }, COURSES[k].course)));
+    sel.value = ks.includes(selectedKey) ? selectedKey : ks[0];
+  }
+
+  function gradeField(key, id, labelText) {
+    const full = key + "_" + id;
+    const wrap = el("div", { class: "field" });
+    wrap.appendChild(el("label", { for: "in_" + full }, labelText));
+    const input = el("input", {
+      type: "number", id: "in_" + full, inputmode: "decimal",
+      min: "0", max: "150", step: "0.1"
+    });
+    if (values[full] !== undefined) input.value = values[full];
+    input.addEventListener("input", () => {
+      values[full] = input.value;
+      update();
+    });
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function buildInputs() {
+    const box = $("inputs");
+    const c = COURSES[currentKey];
+    box.innerHTML = "";
+    c.components.forEach((comp) => {
+      if (comp.parts) {
+        box.appendChild(el("h3", { class: "group-heading" }, comp.heading || comp.label));
+        const pair = el("div", { class: "pair" });
+        comp.parts.forEach((part, i) => {
+          pair.appendChild(gradeField(currentKey, part, comp.partLabels[i] + " (%)"));
+        });
+        box.appendChild(pair);
+        box.appendChild(el("hr"));
+      } else {
+        box.appendChild(gradeField(currentKey, comp.id,
+          comp.label + " (%) — " + comp.weight + "%"));
+      }
+    });
+  }
+
+  function applyTheme() {
+    const c = COURSES[currentKey];
+    const root = document.documentElement.style;
+    root.setProperty("--bg", c.bg);
+    root.setProperty("--accent", c.accent);
+    root.setProperty("--dark", c.dark);
+  }
+
+  function setCourse(key) {
+    currentKey = key;
+    applyTheme();
+    buildInputs();
+    update();
+    // Keep the address bar in step so students can bookmark their course.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("course", key);
+      history.replaceState(null, "", url);
+    } catch (e) { /* not important if this fails */ }
+  }
+
+  // ---- Calculation ----------------------------------------------------------
+  function results() {
+    const c = COURSES[currentKey];
+    const get = (id) => clean(values[currentKey + "_" + id]);
+
+    const rows = c.components.map((comp) => {
+      if (comp.parts) {
+        const v = comp.parts.map(get);
+        const have = v.filter((x) => x !== null);
+        let score = null, dropped = null;
+        if (comp.dropLowest && have.length === v.length) {
+          const d = v.indexOf(Math.min(...v));   // first lowest, like R's which.min
+          dropped = comp.partLabels[d];
+          score = mean(v.filter((_, i) => i !== d));
+        } else if (have.length > 0) {
+          score = mean(have);
+        }
+        return { label: comp.label, weight: comp.weight, score: score,
+                 drop: !!comp.dropLowest, dropped: dropped,
+                 entered: have.length, total: v.length };
+      }
+      return { label: comp.label, weight: comp.weight, score: get(comp.id),
+               drop: false, dropped: null, entered: null, total: null };
+    });
+
+    const counted = rows.filter((r) => r.score !== null);
+    const sumW = counted.reduce((a, r) => a + r.weight, 0);
+    const final = counted.length
+      ? counted.reduce((a, r) => a + r.score * r.weight, 0) / sumW
+      : null;
+    return { rows: rows, final: final, counted: sumW, any: counted.length > 0 };
+  }
+
+  // ---- Display --------------------------------------------------------------
+  function update() {
+    const r = results();
+
+    const finalEl = $("final");
+    if (r.final === null) {
+      finalEl.textContent = "—";
+      finalEl.classList.add("empty");
+      $("letter").textContent = "";
+    } else {
+      finalEl.textContent = fmt(r.final) + "%";
+      finalEl.classList.remove("empty");
+      $("letter").textContent = "Letter grade: " + letterGrade(r.final);
+    }
+
+    let msg;
+    if (!r.any) {
+      msg = "Enter at least one grade to see an estimate.";
+    } else {
+      msg = r.counted < 100
+        ? "Based on the " + r.counted + "% of the course you've entered so far " +
+          "(assumes you keep the same performance on the rest)."
+        : "Based on all course components.";
+      r.rows.forEach((row) => {
+        if (!row.drop) return;
+        if (row.dropped !== null) {
+          msg += " " + row.dropped + " (your lowest) was dropped.";
+        } else if (row.entered > 0) {
+          msg += " The lowest exam will be dropped once all " + row.total +
+                 " are entered. If you missed an exam, enter 0 for it so the estimate is accurate.";
+        }
       });
-    </script>
-    <link rel="stylesheet" href="./shinylive/style-resets.css" />
-    <link rel="stylesheet" href="./shinylive/shinylive.css" />
-    
-  </head>
-  <body>
-    
-    <div style="height: 100vh; width: 100vw" id="root"></div>
-    
-  </body>
+    }
+    $("basis").textContent = msg;
+
+    const tbody = $("breakdown");
+    tbody.innerHTML = "";
+    r.rows.forEach((row) => {
+      const tr = el("tr");
+      const has = row.score !== null;
+      tr.appendChild(el("td", {}, row.label));
+      tr.appendChild(el("td", { class: "num" }, row.weight + "%"));
+      tr.appendChild(el("td", { class: "num" }, has ? fmt(row.score) + "%" : "—"));
+      tr.appendChild(el("td", { class: "num" },
+        has ? fmt(row.score * row.weight / 100) + " / " + row.weight : "—"));
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ---- Events ---------------------------------------------------------------
+  $("prof").addEventListener("change", () => {
+    fillCourses($("prof").value);
+    setCourse($("course").value);
+  });
+
+  $("course").addEventListener("change", () => setCourse($("course").value));
+
+  $("reset").addEventListener("click", () => {
+    Object.keys(values).forEach((k) => {
+      if (k.startsWith(currentKey + "_")) delete values[k];
+    });
+    buildInputs();
+    update();
+  });
+
+  // ---- Start ----------------------------------------------------------------
+  fillProfs();
+  let startKey = null;
+  try {
+    const q = new URLSearchParams(window.location.search).get("course");
+    if (q && Object.prototype.hasOwnProperty.call(COURSES, q)) startKey = q;
+  } catch (e) { /* ignore */ }
+  const startProf = startKey ? COURSES[startKey].prof : profs[0];
+  $("prof").value = startProf;
+  fillCourses(startProf, startKey);
+  setCourse($("course").value);
+
+  // The old Shinylive site installed a helper ("service worker") in students'
+  // browsers. It isn't needed anymore, so remove it quietly.
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.getRegistrations()
+      .then((regs) => regs.forEach((reg) => reg.unregister()))
+      .catch(() => {});
+  }
+})();
+</script>
+</body>
 </html>
