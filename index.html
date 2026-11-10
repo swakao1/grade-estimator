@@ -97,8 +97,8 @@
   .row-meta { font-size: 14px; color: var(--ink-soft); margin-top: 2px; }
   .row-meta b { font-weight: 600; color: var(--ink); }
   .group { grid-template-columns: 1fr; }
-  .parts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
-  @media (max-width: 520px) { .parts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .parts { display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
+  @media (max-width: 520px) { .parts[data-n="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .part label { display: flex; justify-content: space-between; gap: 6px; font-size: 14px; color: var(--ink-soft); margin-bottom: 4px; }
   .tag-dropped { display: none; font-size: 12px; font-weight: 600; color: var(--accent); }
   .part.dropped .tag-dropped { display: inline; }
@@ -281,10 +281,11 @@ const COURSES = {
     prof: "Wakao", course: "GOVT-2305/2306",
     tint: "#e9eff6", accent: "#2f6aa3", deep: "#1f4e79",
     components: [
-      { id: "exams", label: "Exams", weight: 60,
-        parts: ["exam1", "exam2", "exam3", "exam4"],
-        partLabels: ["Exam 1", "Exam 2", "Exam 3", "Exam 4"],
+      { id: "exams", label: "Exams 1\u20133", weight: 40,
+        parts: ["exam1", "exam2", "exam3"],
+        partLabels: ["Exam 1", "Exam 2", "Exam 3"],
         dropLowest: true },
+      { id: "exam4",    label: "Exam 4",                     weight: 20 },
       { id: "tutoring", label: "Tutoring Center Assignment", weight: 5 },
       { id: "paper",    label: "Position Paper",             weight: 15 },
       { id: "homework", label: "Homework (average)",         weight: 20 }
@@ -434,7 +435,7 @@ const CUTOFFS = [["A", 90], ["B", 80], ["C", 70], ["D", 60]];
         head.appendChild(el("div", { class: "row-name" }, comp.label));
         head.appendChild(el("div", { class: "row-meta", id: "meta_" + ci }));
         row.appendChild(head);
-        const parts = el("div", { class: "parts" });
+        const parts = el("div", { class: "parts", "data-n": comp.parts.length, style: "--n:" + comp.parts.length });
         comp.parts.forEach((part, i) => {
           const full = currentKey + "_" + part;
           const p = el("div", { class: "part", id: "part_" + full });
@@ -570,7 +571,7 @@ const CUTOFFS = [["A", 90], ["B", 80], ["C", 70], ["D", 60]];
         if (row.droppedIndex >= 0) {
           msg += " " + row.comp.partLabels[row.droppedIndex] + " (your lowest) was dropped.";
         } else if (row.entered > 0) {
-          msg += " Your lowest exam will be dropped once all " + row.total +
+          msg += " Your lowest score in " + row.comp.label + " will be dropped once all " + row.total +
                  " are entered. If you missed an exam, enter 0 for it.";
         }
       });
